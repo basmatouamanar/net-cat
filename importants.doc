@@ -1,0 +1,221 @@
+###########tcp############ ==>
+✅ Yes, TCP is a way of communication between nodes (computers, servers, phones, etc.) in a network.
+
+✅ Handshake: TCP is responsible for the three-way handshake to establish a reliable connection between two devices before sending any real data.
+
+✅ Splitting into chunks: TCP breaks large data into segments (chunks). Each segment has a sequence number, so the receiver knows how to put them back in order.
+
+✅ Reliability check:
+
+The receiver sends an ACK (acknowledgement) for each segment it receives.
+
+If the sender doesn’t get an ACK within a timeout, it retransmits that segment.
+
+✅ Reassembly: On the receiver’s side, TCP collects all the chunks, arranges them by their sequence numbers, and delivers the full data stream to the application (e.g., a browser or email client).
+
+✅ Flow control & congestion control: TCP also adjusts how fast it sends data depending on the receiver’s capacity and network conditions.
+
+🔹 So in simple words:
+
+TCP = the careful mailman 📦:
+
+Knocks before entering (handshake).
+
+Splits your big package into smaller boxes (segments).
+
+Numbers them so they don’t get mixed up.
+
+Waits for a receipt (ACK) for each one.
+
+Resends if one got lost.
+
+Makes sure everything is delivered in the right order.
+
+########################### tcp liste function #########==>
+ln, _ := net.Listen("tcp", ":"+port)
+Let’s break it down:
+
+🔹 What happens here
+net.Listen("tcp", ":"+port)
+
+You’re telling Go: “Open a TCP socket and listen for incoming connections on this port (on all local IPs by default)”.
+
+Example: :8080 means “listen on port 8080 on all interfaces (0.0.0.0:8080)”.
+
+Incoming connection
+
+Another node (client) tries to connect to your machine using tcp and that port.
+
+The TCP handshake (SYN → SYN-ACK → ACK) happens automatically by the OS kernel + Go runtime.
+
+If successful, a TCP connection is established.
+
+Bidirectional communication
+
+After handshake, Go gives you a net.Conn object (from ln.Accept()) representing the connection.
+
+You can Read() from it (what the client sends) and Write() to it (what you send back).
+
+TCP guarantees delivery, order, and retransmission if packets are lost.
+
+🔹 So in your words
+✅ Yes — you’re listening on a port with TCP.
+✅ If another node connects, TCP handles the 3-step handshake.
+✅ A reliable, full-duplex channel (like a tunnel) is opened.
+✅ Data can then be sent and received in both directions until one side closes the connection.
+
+👉 Small detail: it’s not really called a “tunnel” (that term is usually used for VPNs/SSH tunnels). It’s better to call it a TCP connection or socket.
+#################### listen.Accept function #############################
+🔹 listener.Accept()
+
+In Go, when you call:
+
+conn, err := listener.Accept()
+
+
+you’re telling Go:
+👉 “Wait until a client connects, then give me an object so I can talk to that client.”
+
+🔹 What happens under the hood
+
+Blocking wait
+
+Accept() blocks (pauses) until a new client finishes the TCP handshake with your listener.
+
+This handshake is done by the OS + Go runtime automatically.
+
+Return value
+
+If a client connects successfully, Accept() returns a net.Conn object.
+
+type Conn interface {
+    Read(b []byte) (n int, err error)
+    Write(b []byte) (n int, err error)
+    Close() error
+    LocalAddr() Addr
+    RemoteAddr() Addr
+    SetDeadline(t time.Time) error
+    ...
+}
+
+
+So conn is the active TCP connection between your server and that client.
+
+Communication
+
+With this net.Conn, you can now:
+
+conn.Read() → receive data from the client
+
+conn.Write() → send data to the client
+
+TCP ensures reliability (ordering, retransmission, etc.).
+
+Multiple clients
+
+Every call to Accept() handles one client.
+
+If you want to serve many clients, you typically put each connection in a goroutine:
+
+for {
+    conn, err := listener.Accept()
+    if err != nil {
+        log.Println("Error accepting:", err)
+        continue
+    }
+    go handleConnection(conn) // run each client in a separate goroutine
+}
+
+🔹 Analogy
+
+net.Listen("tcp", ":8080") → opens a door and waits. 🚪
+
+listener.Accept() → someone knocks, handshake happens, you let them in and now you have a private conversation room (net.Conn) with them.
+
+You can then talk (Write) or listen (Read) as long as the connection stays open.
+
+
+########################## go routine ###################################"
+Perfect — goroutines are one of the core features of Go, and once you get them, Go’s concurrency model makes a lot more sense. Let’s unpack this step by step:
+
+🔹 What is a goroutine?
+
+A goroutine is basically a lightweight thread managed by the Go runtime.
+When you write:
+
+go handleConnection(conn)
+
+
+you’re telling Go:
+👉 “Run this function concurrently (in the background), without blocking the rest of my code.”
+
+🔹 Why use goroutines?
+
+Imagine your server accepts 100 clients at the same time.
+
+If you handled them one by one, only one client could talk while the others wait. ❌
+
+With goroutines, you can handle each client independently and concurrently. ✅
+
+That’s why in TCP servers we do:
+
+for {
+    conn, _ := listener.Accept()
+    go handleConnection(conn) // each client gets its own goroutine
+}
+
+
+This way:
+
+Client A can be downloading data,
+
+Client B can be uploading,
+
+Client C can just be idle,
+all at the same time, without blocking each other.
+
+🔹 How goroutines are managed
+
+Not like OS threads:
+A thread is “heavy” (takes memory, context switches are expensive).
+A goroutine is “light” (only a few KB of stack memory).
+
+Multiplexed onto threads:
+The Go runtime has a scheduler that runs thousands (even millions) of goroutines across a small number of OS threads.
+
+Automatic scheduling:
+You don’t manage goroutines manually. Go decides when to pause/resume them, depending on CPU and I/O availability.
+
+Stack grows/shrinks:
+Goroutines start with a small stack (like 2 KB), but grow dynamically if needed.
+
+########################## Stack vs Heap ###############################""
+Stack vs Heap
+
+Stack:
+
+Small, fast, managed automatically (push/pop).
+
+Holds function calls and local variables.
+
+Size is limited (too deep recursion = stack overflow).
+
+Heap:
+
+Big, slower, managed by the garbage collector.
+
+Holds data that needs to “live longer” than a function call (e.g., objects created with new or make).
+
+Used when the compiler can’t guarantee that a variable’s lifetime fits within the stack.
+🔹 1. The whole program has one stack per thread/goroutine
+
+Each goroutine in Go has its own private stack.
+
+That stack holds all the stack frames for the functions that goroutine is currently running.
+
+🔹 2. Each function call = one stack frame
+
+When a function is called, Go allocates a stack frame on the goroutine’s stack.
+
+That stack frame contains all the local variables + arguments for that function.
+##########################"
